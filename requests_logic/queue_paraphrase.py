@@ -1,5 +1,6 @@
 import time
 import requests
+from .proxies_former import Proxies
 
 
 class QueueParaphrase:
@@ -17,17 +18,56 @@ class QueueParaphrase:
         self.url_check = "https://api.retext.ai/api/v1/queue_check?taskId="
         self.task_id = ""
 
+        self.is_deny = False
+
+        self.https_proxies = []
+        self.proxies = {}
+
+        self.url_proxies = None
+
     def send_queue(self, source, lang):
         data = {
             "source": source,
             "lang": lang
         }
-        status = requests.post(url=self.url, json=data)
+        print(self.proxies)
+        if not self.is_deny:
+            status = requests.post(url=self.url, json=data)
+        else:
+            self.form_proxies()
+            if self.url_proxies is None:
+                self.url_proxies = self.return_proxies(https_proxies=self.https_proxies)
+            try:
+                status = requests.post(url=self.url, json=data, proxies=self.proxies, timeout=5)
+                if status.json().get("status") == "limit_exceeded":
+                    print(status.json())
+                    url = next(self.url_proxies)
+                    self.proxies["http"] = url
+                    return self.send_queue(source=source, lang=lang)
+            except Exception:
+                url = next(self.url_proxies)
+                self.proxies["http"] = url
+                return self.send_queue(source=source, lang=lang)
+
         response_data = status.json()
-        if status.status_code == 200:
-            return response_data.get("data").get("taskId")
+        if status.status_code == 200 and not self.is_deny:
+            try:
+                return response_data.get("data").get("taskId")
+            except AttributeError:
+                self.is_deny = True
+                return self.send_queue(source=source, lang=lang)
         elif status.status_code == 400:
             raise NotAvailableException(message=self.errors_messages, errors=self.errors)
+
+    def form_proxies(self):
+        p = Proxies()
+        p.get_pages(page_n=5)
+        self.https_proxies = p.ips_and_ports_list
+
+    @staticmethod
+    def return_proxies(https_proxies):
+        for url in https_proxies:
+            yield url
 
     def queue_check(self, task_id):
         status = requests.get(url=self.url_check+task_id)
