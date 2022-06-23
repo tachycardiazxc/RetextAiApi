@@ -38,6 +38,7 @@ pip install -r requirements.txt
 MVP Goals:
 
 <del>1) Add simple program usage through console and text.txt</del>
+
 2) Add language selection
 
 Project Goals:
